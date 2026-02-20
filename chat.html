@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arabica Chat (Simulated)</title>
+    <style>
+        /* Paste your entire dark theme CSS here (same as before) */
+        * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui; }
+        .chat-body { background:#0a0c0f; display:flex; justify-content:center; align-items:center; min-height:100vh; padding:16px; }
+        .chat-container { width:100%; max-width:480px; height:700px; background:#1e1f25; border-radius:32px; display:flex; flex-direction:column; overflow:hidden; border:1px solid #2f3136; }
+        #welcomeUser { padding:20px 24px; font-size:1.3rem; font-weight:600; background:#26282f; color:#e4e6eb; border-bottom:1px solid #363a42; display:flex; align-items:center; gap:10px; }
+        #welcomeUser::before { content:"💬"; font-size:1.6rem; }
+        .chat-box { flex:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:16px; background:#17181d; }
+        .message-row { display:flex; align-items:flex-end; gap:8px; max-width:100%; }
+        .message-row.own { flex-direction:row-reverse; }
+        .avatar { width:38px; height:38px; border-radius:50%; background:#2d3038; display:flex; align-items:center; justify-content:center; font-weight:600; color:#f0f2f5; border:2px solid #3e424b; }
+        .own .avatar { background:#0b5793; border-color:#2b7bcb; }
+        .bubble-wrapper { max-width:70%; display:flex; flex-direction:column; }
+        .bubble { padding:12px 16px; border-radius:22px; background:#2f3136; color:#e9edf2; border:1px solid #40444b; }
+        .own .bubble { background:#1d4b77; border-color:#3670b3; color:white; }
+        .meta { display:flex; align-items:center; gap:6px; font-size:0.7rem; margin-bottom:4px; color:#8e929b; }
+        .own .meta { justify-content:flex-end; }
+        .sender-name { font-weight:600; color:#b5bac1; }
+        .own .sender-name { color:#8cb3d9; }
+        .timestamp { font-size:0.65rem; opacity:0.7; }
+        .chat-input { background:#26282f; padding:16px 20px; display:flex; gap:10px; align-items:center; border-top:1px solid #363a42; position:relative; }
+        .chat-input input { flex:1; background:#13151a; border:1px solid #3a3f4a; border-radius:30px; padding:12px 18px; color:#f0f2f5; outline:none; }
+        .chat-input input:focus { border-color:#2b7bcb; }
+        .chat-input button { background:#2b7bcb; border:none; color:white; width:46px; height:46px; border-radius:50%; font-size:1.5rem; cursor:pointer; }
+        .emoji-picker { display:none; position:absolute; bottom:80px; right:20px; background:#2a2d36; border-radius:24px; padding:14px; width:280px; max-height:260px; overflow-y:auto; grid-template-columns:repeat(6,1fr); gap:8px; z-index:10; }
+        .emoji-picker.show { display:grid; }
+        .emoji-picker span { font-size:1.7rem; cursor:pointer; text-align:center; }
+    </style>
+</head>
+<body class="chat-body">
+    <div class="chat-container">
+        <h2 id="welcomeUser">Welcome <span id="userName">Guest</span></h2>
+        <div class="chat-box" id="chatBox"></div>
+        <div class="chat-input">
+            <input type="text" id="messageInput" placeholder="Type a message..." />
+            <button onclick="toggleEmoji()">🙂</button>
+            <button onclick="sendMessage()">➤</button>
+            <div class="emoji-picker" id="emojiBox"></div>
+        </div>
+    </div>
+
+    <script>
+        // ---------- Get logged user from localStorage (set at login) ----------
+        let currentUser = localStorage.getItem("loggedUser") || "Guest";
+        document.getElementById("userName").innerText = currentUser;
+
+        // ---------- Emoji list (same as before) ----------
+        const emojiList = ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','😉','😍','😘','😜','🤪','😎','🤩','🥳','😏','😒','😞','😢','😭','😤','😡','🤬','😱','😴','🤤','🤔','👍','👎','👏','🙌','🙏','💪','🔥','💯','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','⭐','✨','⚡','🎉','🎮','🚗','🏆','⚽','🍔','🍕','🍟','🥤'];
+        const emojiBox = document.getElementById('emojiBox');
+        emojiList.forEach(emoji => {
+            const span = document.createElement('span');
+            span.textContent = emoji;
+            span.onclick = () => {
+                document.getElementById('messageInput').value += emoji;
+                document.getElementById('messageInput').focus();
+            };
+            emojiBox.appendChild(span);
+        });
+
+        window.toggleEmoji = () => emojiBox.classList.toggle('show');
+        document.addEventListener('click', (e) => {
+            if (!emojiBox.contains(e.target) && !e.target.matches('button[onclick="toggleEmoji()"]')) {
+                emojiBox.classList.remove('show');
+            }
+        });
+
+        // ---------- Chat functions ----------
+        const chatBox = document.getElementById('chatBox');
+        const messageInput = document.getElementById('messageInput');
+
+        function formatTime(date = new Date()) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function addMessage(sender, text, time = new Date()) {
+            const row = document.createElement('div');
+            row.className = 'message-row' + (sender === currentUser ? ' own' : '');
+
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            avatar.textContent = sender.charAt(0).toUpperCase();
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bubble-wrapper';
+
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'sender-name';
+            nameSpan.textContent = sender;
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'timestamp';
+            timeSpan.textContent = formatTime(time);
+            meta.appendChild(nameSpan);
+            meta.appendChild(timeSpan);
+
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            bubble.textContent = text;
+
+            wrapper.appendChild(meta);
+            wrapper.appendChild(bubble);
+            row.appendChild(avatar);
+            row.appendChild(wrapper);
+            chatBox.appendChild(row);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        window.sendMessage = function() {
+            const text = messageInput.value.trim();
+            if (text === '') return;
+            addMessage(currentUser, text);
+            messageInput.value = '';
+
+            // Simulate a reply from another user after a delay
+            setTimeout(() => {
+                const otherUsers = ['Alice', 'Bob', 'Charlie'];
+                const randomUser = otherUsers[Math.floor(Math.random() * otherUsers.length)];
+                const replies = ['Nice!', '👍', 'Hello', '😄', 'Cool', 'I agree'];
+                const randomReply = replies[Math.floor(Math.random() * replies.length)];
+                addMessage(randomUser, randomReply);
+            }, 1500);
+        };
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Load some initial dummy messages
+        addMessage('Alice', 'Hi everyone! 👋', new Date(Date.now() - 3600000));
+        addMessage('Bob', 'Dark mode is awesome 😎', new Date(Date.now() - 1800000));
+        addMessage(currentUser, 'Welcome to the chat!', new Date(Date.now() - 60000));
+    </script>
+</body>
+</html>
